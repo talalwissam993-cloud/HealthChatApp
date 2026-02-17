@@ -369,6 +369,39 @@ export const searchUsers = catchAsyncErrors(async (req, res) => {
     res.status(200).json({ success: true, users });
 });
 // *****************************************************************
+export const getAllDoctors = async (req, res, next) => {
+    const doctors = await User.find({ role: "Doctor" }); // Fetching the variable
+
+    res.status(200).json({
+        success: true,
+        doctors, // The frontend will loop through this variable to show cards
+    });
+};
+export const getAllNurse = async (req, res, next) => {
+    const doctors = await User.find({ role: "Nurse" }); // Fetching the variable
+
+    res.status(200).json({
+        success: true,
+        doctors, // The frontend will loop through this variable to show cards
+    });
+};
+export const getAllChemist = async (req, res, next) => {
+    const doctors = await User.find({ role: "Chemist" }); // Fetching the variable
+
+    res.status(200).json({
+        success: true,
+        doctors, // The frontend will loop through this variable to show cards
+    });
+};
+export const getAllPatient = async (req, res, next) => {
+    const doctors = await User.find({ role: "Patient" }); // Fetching the variable
+
+    res.status(200).json({
+        success: true,
+        doctors, // The frontend will loop through this variable to show cards
+    });
+};
+// *****************************************************************
 
 // Friends Request
 export const sendFriendRequest = catchAsyncErrors(async (req, res, next) => {
