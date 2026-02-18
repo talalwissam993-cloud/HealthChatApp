@@ -64,7 +64,6 @@ const userSchema = new mongoose.Schema({
     },
     nurseDepartment: {
         type: String,
-        required: true,
         enum: [
             "Critical Care / ICU",
             "Emergency & Trauma",
