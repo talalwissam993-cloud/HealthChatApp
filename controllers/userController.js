@@ -3,7 +3,6 @@ import ErrorHandler from "../middlewares/error.js";
 import { User } from "../models/userSchema.js";
 import cloudinary from "cloudinary";
 import { generateToken } from "../utils/jwtToken.js";
-import crypto from "crypto";
 import { sendEmailVerification } from "../utils/sendEmail.js";
 import { FriendRequest } from '../models/FriendRequestChema.js'
 import { Message } from "../models/messageSchema.js";
@@ -130,28 +129,45 @@ export const addNewUser = catchAsyncErrors(async (req, res, next) => {
         return next(new ErrorHandler(`${role} with this Email or NIC already exists!`, 400));
     }
 
-    // 4. Role-Specific Validation
-    if (role === "Doctor" && !doctorDepartment) return next(new ErrorHandler("Doctor Department is required!", 400));
-    if (role === "Nurse" && !nurseDepartment) return next(new ErrorHandler("Nurse Department is required!", 400));
-    if (role === "Chemist" && !chemistType) return next(new ErrorHandler("Chemist Type is required!", 400));
+    // 4. PREPARE CLEAN DATA OBJECT
+    // Start with core fields
+    let userData = {
+        firstName, middleName, lastName, email, phone, nic, dob, gender, password, role
+    };
 
-    // 5. Cloudinary Upload
+    // 5. ROLE-SPECIFIC CLEANING (The Fix)
+    // Only add professional fields if they are actually required for the role
+    if (role === "Doctor") {
+        if (!doctorDepartment) return next(new ErrorHandler("Doctor Department is required!", 400));
+        userData.doctorDepartment = doctorDepartment;
+        userData.qualification = qualification;
+        userData.assignedHospital = assignedHospital;
+    } else if (role === "Nurse") {
+        if (!nurseDepartment) return next(new ErrorHandler("Nurse Department is required!", 400));
+        userData.nurseDepartment = nurseDepartment;
+        userData.shift = shift;
+        userData.assignedHospital = assignedHospital;
+    } else if (role === "Chemist") {
+        if (!chemistType) return next(new ErrorHandler("Chemist Type is required!", 400));
+        userData.chemistType = chemistType;
+        userData.assignedHospital = assignedHospital;
+    } 
+    // If role is Patient, doctorDepartment/nurseDepartment/etc are NOT added to userData at all.
+
+    // 6. Cloudinary Upload
     const cloudinaryResponse = await cloudinary.v2.uploader.upload(
         docAvatar.tempFilePath,
         { folder: "HEALTH_CHAT_AVATARS" }
     );
 
-    // --- NEW: VERIFICATION LOGIC ---
-    // Generate 6-digit random code
+    // 7. Verification Logic
     const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
-    const verificationCodeExpire = Date.now() + 15 * 60 * 1000; // 15 minutes expiry
+    const verificationCodeExpire = Date.now() + 15 * 60 * 1000;
 
-    // 6. Create User (isVerified is now FALSE by default)
+    // 8. Create User using the CLEAN 'userData' object
     const user = await User.create({
-        firstName, middleName, lastName, email, phone, nic, dob, gender, password,
-        role, doctorDepartment, nurseDepartment, chemistType, qualification,
-        shift, assignedHospital,
-        isVerified: false, // Changed from true
+        ...userData, // Spread only the cleaned fields
+        isVerified: false,
         verificationCode,
         verificationCodeExpire,
         docAvatar: {
@@ -160,8 +176,8 @@ export const addNewUser = catchAsyncErrors(async (req, res, next) => {
         },
     });
 
-    // 7. Send the Email
-    const message = `Welcome to Health Chat. Your verification code is: ${verificationCode}. It expires in 15 minutes.`;
+    // 9. Send the Email
+    const message = `Welcome to Health Chat. Your verification code is: ${verificationCode}.`;
 
     try {
         await sendEmailVerification({
@@ -176,12 +192,10 @@ export const addNewUser = catchAsyncErrors(async (req, res, next) => {
             message: `Registration Successful! Verification code sent to ${user.email}`,
         });
     } catch (error) {
-        // If email fails, we don't want a "broken" user in DB with no way to verify
         await User.findByIdAndDelete(user._id);
         return next(new ErrorHandler("Email could not be sent. Please try again.", 500));
     }
 });
-
 export const verifyOTP = catchAsyncErrors(async (req, res, next) => {
     const { email, code } = req.body;
 
