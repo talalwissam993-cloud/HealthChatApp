@@ -37,9 +37,9 @@ router.get("/admin/logout", isAdminAuthenticated, logoutAdmin);
 
 // --- USER MANAGEMENT ---
 // Note: Only authenticated admins should be able to register new doctors/nurses
-router.post("/register", isAdminAuthenticated, addNewUser);
+router.post("/register", addNewUser);
 router.put("/profile/update", isAuthenticated, updateProfile);
-router.get("/admin/all-users", isAdminAuthenticated, getAllUsersByRole);
+router.get("/admin/all-users",isAuthenticated, getAllUsersByRole);
 
 // --- NEW: VERIFICATION ROUTE ---
 // This is called when the user enters the 6-digit code from their email
