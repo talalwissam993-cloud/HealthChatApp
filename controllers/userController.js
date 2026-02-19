@@ -131,7 +131,7 @@ export const addNewUser = catchAsyncErrors(async (req, res, next) => {
 
     // 4. Role-Specific Logic
     let userData = {
-        firstName, middleName, lastName, email: email.toLowerCase().trim(), 
+        firstName, middleName, lastName, email: email.toLowerCase().trim(),
         phone, nic, dob, gender, password, role
     };
 
@@ -176,343 +176,343 @@ export const addNewUser = catchAsyncErrors(async (req, res, next) => {
     // 8. Send the Email
     try {
         sendEmailVerification({
-    email: user.email,
-    subject: "Verify Your Health Chat Account",
-    code: verificationCode,
-}).catch(err => console.error("Delayed Email Error:", err.message));
-
-// Immediately send success to the mobile app
-res.status(201).json({
-    success: true,
-    message: `Registration Successful! Check your email.`,
-});
-        
-});
-export const verifyOTP = catchAsyncErrors(async (req, res, next) => {
-    // CHANGE: Destructure 'otp' instead of 'code' to match frontend request
-    const { email, otp } = req.body; 
-
-    if (!email || !otp) {
-        return next(new ErrorHandler("Email and OTP are required!", 400));
-    }
-
-    const user = await User.findOne({
-        email: email.toLowerCase().trim(),
-        verificationCode: otp, // Matches the 'verificationCode' field in your Schema
-        verificationCodeExpire: { $gt: Date.now() },
-    }).select("+verificationCode +verificationCodeExpire");
-
-    if (!user) {
-        return next(new ErrorHandler("Invalid or expired verification code!", 400));
-    }
-
-    user.isVerified = true;
-    user.verificationCode = undefined;
-    user.verificationCodeExpire = undefined;
-    await user.save();
-
-    res.status(200).json({
-        success: true,
-        message: "Account verified successfully! You can now login.",
-    });
-});
-export const resendOTP = catchAsyncErrors(async (req, res, next) => {
-    const { email } = req.body;
-    if (!email) return next(new ErrorHandler("Email is required!", 400));
-
-    const user = await User.findOne({ email: email.toLowerCase().trim() });
-    if (!user) return next(new ErrorHandler("User not found!", 404));
-    if (user.isVerified) return next(new ErrorHandler("Already verified!", 400));
-
-    // Fix: Ensure variables exist before comparison
-    const now = Date.now();
-    if (user.otpResendCount >= 3 && user.lastOtpResend > (now - 60 * 60 * 1000)) {
-        return next(new ErrorHandler("Too many attempts. Try again in an hour.", 429));
-    }
-
-    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
-    
-    user.verificationCode = verificationCode;
-    user.verificationCodeExpire = now + 15 * 60 * 1000;
-    user.otpResendCount = (user.otpResendCount || 0) + 1;
-    user.lastOtpResend = now;
-    
-    await user.save();
-
-    try {
-        await sendEmailVerification({
             email: user.email,
-            subject: "HealthChat | New Verification Code",
+            subject: "Verify Your Health Chat Account",
             code: verificationCode,
-            message: `Your new code is ${verificationCode}` // Ensure your helper handles 'message'
+        }).catch(err => console.error("Delayed Email Error:", err.message));
+
+        // Immediately send success to the mobile app
+        res.status(201).json({
+            success: true,
+            message: `Registration Successful! Check your email.`,
         });
 
-        res.status(200).json({ success: true, message: "New code sent!" });
-    } catch (error) {
-        return next(new ErrorHandler("Mail server error. Try again later.", 500));
-    }
-});
-export const updateProfile = catchAsyncErrors(async (req, res, next) => {
-    // 1. Fetch user (select password in case they want to change it)
-    const user = await User.findById(req.user._id).select("+password");
 
-    if (!user) {
-        return next(new ErrorHandler("User not found!", 404));
-    }
+        export const verifyOTP = catchAsyncErrors(async (req, res, next) => {
+            // CHANGE: Destructure 'otp' instead of 'code' to match frontend request
+            const { email, otp } = req.body;
 
-    // 2. Extract updates
-    const {
-        firstName, middleName, lastName, phone, dob,
-        gender, bio, doctorDepartment, nurseDepartment,
-        chemistType, qualification, shift, emergencyContact,
-        assignedHospital, isOnDuty, password
-    } = req.body;
-
-    // 3. Update core info
-    user.firstName = firstName || user.firstName;
-    user.middleName = middleName || user.middleName;
-    user.lastName = lastName || user.lastName;
-    user.phone = phone || user.phone;
-    user.dob = dob || user.dob;
-    user.gender = gender || user.gender;
-    user.bio = bio || user.bio;
-    user.qualification = qualification || user.qualification;
-    user.emergencyContact = emergencyContact || user.emergencyContact;
-    user.assignedHospital = assignedHospital || user.assignedHospital;
-    user.isOnDuty = isOnDuty !== undefined ? isOnDuty : user.isOnDuty;
-
-    // 4. Role-specific logic
-    if (user.role === "Doctor") user.doctorDepartment = doctorDepartment || user.doctorDepartment;
-    if (user.role === "Nurse") user.nurseDepartment = nurseDepartment || user.nurseDepartment;
-    if (user.role === "Chemist") user.chemistType = chemistType || user.chemistType;
-    if (user.role !== "Patient") user.shift = shift || user.shift;
-
-    // 5. Update Password (Middleware hashes this automatically)
-    if (password) {
-        user.password = password;
-    }
-
-    // 6. Handle Avatar via Cloudinary
-    if (req.files && req.files.docAvatar) {
-        const file = req.files.docAvatar;
-        if (user.docAvatar && user.docAvatar.public_id) {
-            await cloudinary.v2.uploader.destroy(user.docAvatar.public_id);
-        }
-        const myCloud = await cloudinary.v2.uploader.upload(file.tempFilePath, {
-            folder: "HEALTH_CHAT_AVATARS",
-        });
-        user.docAvatar = {
-            public_id: myCloud.public_id,
-            url: myCloud.secure_url,
-        };
-    }
-
-    // Trigger .save() to run schema pre-save hooks
-    await user.save();
-
-    res.status(200).json({
-        success: true,
-        message: "Profile Updated Successfully!",
-        user,
-    });
-});
-
-export const getAllUsersByRole = catchAsyncErrors(async (req, res, next) => {
-    const { role } = req.query;
-
-    // If a role is provided (e.g., ?role=Doctor), filter by it. 
-    // Otherwise, get everyone EXCEPT Admins for security/privacy.
-    const filter = role ? { role } : { role: { $ne: "Admin" } };
-
-    const users = await User.find(filter).sort({ createdAt: -1 });
-
-    res.status(200).json({
-        success: true,
-        count: users.length,
-        users,
-    });
-});
-
-export const searchUsers = catchAsyncErrors(async (req, res) => {
-    const { query } = req.query;
-
-    if (!query) {
-        return res.status(200).json({ success: true, users: [] });
-    }
-
-    const searchRegex = { $regex: query, $options: "i" };
-
-    const users = await User.find({
-        $and: [
-            { _id: { $ne: req.user._id } }, // Exclude current user
-            {
-                $or: [
-                    { firstName: searchRegex },
-                    { lastName: searchRegex },
-                    { phone: searchRegex },           // Added phone search
-                    { nic: searchRegex },             // Changed to regex for partial NIC
-                    { doctorLicenseNumber: searchRegex },
-                    { nurseLicenseNumber: searchRegex },
-                    { chemistLicenseNumber: searchRegex },
-                    { patientID: searchRegex }
-                ]
+            if (!email || !otp) {
+                return next(new ErrorHandler("Email and OTP are required!", 400));
             }
-        ]
-    }).select("firstName lastName role docAvatar assignedHospital isOnDuty"); // Added isOnDuty for the chat UI
 
-    res.status(200).json({ success: true, users });
-});
-// *****************************************************************
-export const getAllDoctors = async (req, res, next) => {
-    const doctors = await User.find({ role: "Doctor" }); // Fetching the variable
+            const user = await User.findOne({
+                email: email.toLowerCase().trim(),
+                verificationCode: otp, // Matches the 'verificationCode' field in your Schema
+                verificationCodeExpire: { $gt: Date.now() },
+            }).select("+verificationCode +verificationCodeExpire");
 
-    res.status(200).json({
-        success: true,
-        doctors, // The frontend will loop through this variable to show cards
-    });
-};
-export const getAllNurse = async (req, res, next) => {
-    const doctors = await User.find({ role: "Nurse" }); // Fetching the variable
+            if (!user) {
+                return next(new ErrorHandler("Invalid or expired verification code!", 400));
+            }
 
-    res.status(200).json({
-        success: true,
-        doctors, // The frontend will loop through this variable to show cards
-    });
-};
-export const getAllChemist = async (req, res, next) => {
-    const doctors = await User.find({ role: "Chemist" }); // Fetching the variable
+            user.isVerified = true;
+            user.verificationCode = undefined;
+            user.verificationCodeExpire = undefined;
+            await user.save();
 
-    res.status(200).json({
-        success: true,
-        doctors, // The frontend will loop through this variable to show cards
-    });
-};
-export const getAllPatient = async (req, res, next) => {
-    const doctors = await User.find({ role: "Patient" }); // Fetching the variable
+            res.status(200).json({
+                success: true,
+                message: "Account verified successfully! You can now login.",
+            });
+        });
+        export const resendOTP = catchAsyncErrors(async (req, res, next) => {
+            const { email } = req.body;
+            if (!email) return next(new ErrorHandler("Email is required!", 400));
 
-    res.status(200).json({
-        success: true,
-        doctors, // The frontend will loop through this variable to show cards
-    });
-};
-// *****************************************************************
+            const user = await User.findOne({ email: email.toLowerCase().trim() });
+            if (!user) return next(new ErrorHandler("User not found!", 404));
+            if (user.isVerified) return next(new ErrorHandler("Already verified!", 400));
 
-// Friends Request
-export const sendFriendRequest = catchAsyncErrors(async (req, res, next) => {
-    const { receiverId } = req.body;
-    const senderId = req.user._id;
+            // Fix: Ensure variables exist before comparison
+            const now = Date.now();
+            if (user.otpResendCount >= 3 && user.lastOtpResend > (now - 60 * 60 * 1000)) {
+                return next(new ErrorHandler("Too many attempts. Try again in an hour.", 429));
+            }
 
-    if (senderId.toString() === receiverId) {
-        return next(new ErrorHandler("You cannot add yourself!", 400));
-    }
-    const receiver = await User.findById(receiverId);
-    if (req.user.role === "Patient" && receiver.role === "Patient") {
-        return next(new ErrorHandler("Patients cannot add other patients.", 403));
-    }
+            const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
 
-    // Check if a request already exists
-    const existingRequest = await FriendRequest.findOne({
-        $or: [
-            { sender: senderId, receiver: receiverId },
-            { sender: receiverId, receiver: senderId }
-        ]
-    });
+            user.verificationCode = verificationCode;
+            user.verificationCodeExpire = now + 15 * 60 * 1000;
+            user.otpResendCount = (user.otpResendCount || 0) + 1;
+            user.lastOtpResend = now;
 
-    if (existingRequest) {
-        return next(new ErrorHandler("Request already exists or you are already friends!", 400));
-    }
+            await user.save();
 
-    await FriendRequest.create({ sender: senderId, receiver: receiverId });
+            try {
+                await sendEmailVerification({
+                    email: user.email,
+                    subject: "HealthChat | New Verification Code",
+                    code: verificationCode,
+                    message: `Your new code is ${verificationCode}` // Ensure your helper handles 'message'
+                });
 
-    res.status(200).json({ success: true, message: "Friend Request Sent!" });
-});
+                res.status(200).json({ success: true, message: "New code sent!" });
+            } catch (error) {
+                return next(new ErrorHandler("Mail server error. Try again later.", 500));
+            }
+        });
+        export const updateProfile = catchAsyncErrors(async (req, res, next) => {
+            // 1. Fetch user (select password in case they want to change it)
+            const user = await User.findById(req.user._id).select("+password");
 
-export const respondToRequest = catchAsyncErrors(async (req, res, next) => {
-    const { requestId, status } = req.body; // status: "accepted" or "rejected"
+            if (!user) {
+                return next(new ErrorHandler("User not found!", 404));
+            }
 
-    const request = await FriendRequest.findById(requestId);
-    if (!request) return next(new ErrorHandler("Request not found", 404));
+            // 2. Extract updates
+            const {
+                firstName, middleName, lastName, phone, dob,
+                gender, bio, doctorDepartment, nurseDepartment,
+                chemistType, qualification, shift, emergencyContact,
+                assignedHospital, isOnDuty, password
+            } = req.body;
 
-    if (status === "accepted") {
-        // Logic to add to each other's friend lists in User model
-        await User.findByIdAndUpdate(request.sender, { $addToSet: { friends: request.receiver } });
-        await User.findByIdAndUpdate(request.receiver, { $addToSet: { friends: request.sender } });
+            // 3. Update core info
+            user.firstName = firstName || user.firstName;
+            user.middleName = middleName || user.middleName;
+            user.lastName = lastName || user.lastName;
+            user.phone = phone || user.phone;
+            user.dob = dob || user.dob;
+            user.gender = gender || user.gender;
+            user.bio = bio || user.bio;
+            user.qualification = qualification || user.qualification;
+            user.emergencyContact = emergencyContact || user.emergencyContact;
+            user.assignedHospital = assignedHospital || user.assignedHospital;
+            user.isOnDuty = isOnDuty !== undefined ? isOnDuty : user.isOnDuty;
 
-        request.status = "accepted";
-        await request.save();
-    } else {
-        await request.deleteOne(); // Or set to 'rejected'
-    }
+            // 4. Role-specific logic
+            if (user.role === "Doctor") user.doctorDepartment = doctorDepartment || user.doctorDepartment;
+            if (user.role === "Nurse") user.nurseDepartment = nurseDepartment || user.nurseDepartment;
+            if (user.role === "Chemist") user.chemistType = chemistType || user.chemistType;
+            if (user.role !== "Patient") user.shift = shift || user.shift;
 
-    res.status(200).json({ success: true, message: `Request ${status}` });
-});
+            // 5. Update Password (Middleware hashes this automatically)
+            if (password) {
+                user.password = password;
+            }
 
-export const getFriendRequests = async (req, res) => {
-    // Finds pending requests where the current user is the receiver
-    // Populates the sender's medical details for the Health Chat UI
-    const requests = await FriendRequest.find({
-        receiver: req.user._id,
-        status: "pending"
-    }).populate("sender", "firstName lastName role docAvatar doctorDepartment assignedHospital");
+            // 6. Handle Avatar via Cloudinary
+            if (req.files && req.files.docAvatar) {
+                const file = req.files.docAvatar;
+                if (user.docAvatar && user.docAvatar.public_id) {
+                    await cloudinary.v2.uploader.destroy(user.docAvatar.public_id);
+                }
+                const myCloud = await cloudinary.v2.uploader.upload(file.tempFilePath, {
+                    folder: "HEALTH_CHAT_AVATARS",
+                });
+                user.docAvatar = {
+                    public_id: myCloud.public_id,
+                    url: myCloud.secure_url,
+                };
+            }
 
-    res.status(200).json({
-        success: true,
-        requests
-    });
-};
+            // Trigger .save() to run schema pre-save hooks
+            await user.save();
 
-// is OnDuty
-export const toggleDutyStatus = catchAsyncErrors(async (req, res, next) => {
-    const user = await User.findById(req.user._id);
+            res.status(200).json({
+                success: true,
+                message: "Profile Updated Successfully!",
+                user,
+            });
+        });
 
-    if (!user) {
-        return next(new ErrorHandler("User not found", 404));
-    }
+        export const getAllUsersByRole = catchAsyncErrors(async (req, res, next) => {
+            const { role } = req.query;
 
-    // Toggle the boolean
-    user.isOnDuty = !user.isOnDuty;
-    user.lastStatusUpdate = Date.now();
+            // If a role is provided (e.g., ?role=Doctor), filter by it. 
+            // Otherwise, get everyone EXCEPT Admins for security/privacy.
+            const filter = role ? { role } : { role: { $ne: "Admin" } };
 
-    await user.save({ validateBeforeSave: false });
+            const users = await User.find(filter).sort({ createdAt: -1 });
 
-    res.status(200).json({
-        success: true,
-        message: `You are now ${user.isOnDuty ? "On Duty" : "Off Duty"}`,
-        isOnDuty: user.isOnDuty,
-    });
-});
+            res.status(200).json({
+                success: true,
+                count: users.length,
+                users,
+            });
+        });
 
-export const updatePushToken = catchAsyncErrors(async (req, res, next) => {
-    const { token } = req.body;
+        export const searchUsers = catchAsyncErrors(async (req, res) => {
+            const { query } = req.query;
 
-    if (!token) {
-        return next(new ErrorHandler("Token is required", 400));
-    }
+            if (!query) {
+                return res.status(200).json({ success: true, users: [] });
+            }
 
-    // Find user and update their push token
-    await User.findByIdAndUpdate(req.user._id, { pushToken: token });
+            const searchRegex = { $regex: query, $options: "i" };
 
-    res.status(200).json({
-        success: true,
-        message: "Push Token Updated Successfully",
-    });
-});
+            const users = await User.find({
+                $and: [
+                    { _id: { $ne: req.user._id } }, // Exclude current user
+                    {
+                        $or: [
+                            { firstName: searchRegex },
+                            { lastName: searchRegex },
+                            { phone: searchRegex },           // Added phone search
+                            { nic: searchRegex },             // Changed to regex for partial NIC
+                            { doctorLicenseNumber: searchRegex },
+                            { nurseLicenseNumber: searchRegex },
+                            { chemistLicenseNumber: searchRegex },
+                            { patientID: searchRegex }
+                        ]
+                    }
+                ]
+            }).select("firstName lastName role docAvatar assignedHospital isOnDuty"); // Added isOnDuty for the chat UI
 
-export const getMyChatList = catchAsyncErrors(async (req, res) => {
-    const user = await User.findById(req.user._id).populate("friends", "firstName lastName docAvatar role isOnDuty");
+            res.status(200).json({ success: true, users });
+        });
+        // *****************************************************************
+        export const getAllDoctors = async (req, res, next) => {
+            const doctors = await User.find({ role: "Doctor" }); // Fetching the variable
 
-    // For each friend, find the most recent message in the DB
-    const chatList = await Promise.all(user.friends.map(async (friend) => {
-        const conversationId = [req.user._id.toString(), friend._id.toString()].sort().join("_");
-        const lastMsg = await Message.findOne({ conversationId }).sort({ createdAt: -1 });
-
-        return {
-            friend,
-            lastMessage: lastMsg ? lastMsg.text : "No messages yet",
-            lastMessageTime: lastMsg ? lastMsg.createdAt : null
+            res.status(200).json({
+                success: true,
+                doctors, // The frontend will loop through this variable to show cards
+            });
         };
-    }));
+        export const getAllNurse = async (req, res, next) => {
+            const doctors = await User.find({ role: "Nurse" }); // Fetching the variable
 
-    res.status(200).json({ success: true, chatList });
-});
+            res.status(200).json({
+                success: true,
+                doctors, // The frontend will loop through this variable to show cards
+            });
+        };
+        export const getAllChemist = async (req, res, next) => {
+            const doctors = await User.find({ role: "Chemist" }); // Fetching the variable
+
+            res.status(200).json({
+                success: true,
+                doctors, // The frontend will loop through this variable to show cards
+            });
+        };
+        export const getAllPatient = async (req, res, next) => {
+            const doctors = await User.find({ role: "Patient" }); // Fetching the variable
+
+            res.status(200).json({
+                success: true,
+                doctors, // The frontend will loop through this variable to show cards
+            });
+        };
+        // *****************************************************************
+
+        // Friends Request
+        export const sendFriendRequest = catchAsyncErrors(async (req, res, next) => {
+            const { receiverId } = req.body;
+            const senderId = req.user._id;
+
+            if (senderId.toString() === receiverId) {
+                return next(new ErrorHandler("You cannot add yourself!", 400));
+            }
+            const receiver = await User.findById(receiverId);
+            if (req.user.role === "Patient" && receiver.role === "Patient") {
+                return next(new ErrorHandler("Patients cannot add other patients.", 403));
+            }
+
+            // Check if a request already exists
+            const existingRequest = await FriendRequest.findOne({
+                $or: [
+                    { sender: senderId, receiver: receiverId },
+                    { sender: receiverId, receiver: senderId }
+                ]
+            });
+
+            if (existingRequest) {
+                return next(new ErrorHandler("Request already exists or you are already friends!", 400));
+            }
+
+            await FriendRequest.create({ sender: senderId, receiver: receiverId });
+
+            res.status(200).json({ success: true, message: "Friend Request Sent!" });
+        });
+
+        export const respondToRequest = catchAsyncErrors(async (req, res, next) => {
+            const { requestId, status } = req.body; // status: "accepted" or "rejected"
+
+            const request = await FriendRequest.findById(requestId);
+            if (!request) return next(new ErrorHandler("Request not found", 404));
+
+            if (status === "accepted") {
+                // Logic to add to each other's friend lists in User model
+                await User.findByIdAndUpdate(request.sender, { $addToSet: { friends: request.receiver } });
+                await User.findByIdAndUpdate(request.receiver, { $addToSet: { friends: request.sender } });
+
+                request.status = "accepted";
+                await request.save();
+            } else {
+                await request.deleteOne(); // Or set to 'rejected'
+            }
+
+            res.status(200).json({ success: true, message: `Request ${status}` });
+        });
+
+        export const getFriendRequests = async (req, res) => {
+            // Finds pending requests where the current user is the receiver
+            // Populates the sender's medical details for the Health Chat UI
+            const requests = await FriendRequest.find({
+                receiver: req.user._id,
+                status: "pending"
+            }).populate("sender", "firstName lastName role docAvatar doctorDepartment assignedHospital");
+
+            res.status(200).json({
+                success: true,
+                requests
+            });
+        };
+
+        // is OnDuty
+        export const toggleDutyStatus = catchAsyncErrors(async (req, res, next) => {
+            const user = await User.findById(req.user._id);
+
+            if (!user) {
+                return next(new ErrorHandler("User not found", 404));
+            }
+
+            // Toggle the boolean
+            user.isOnDuty = !user.isOnDuty;
+            user.lastStatusUpdate = Date.now();
+
+            await user.save({ validateBeforeSave: false });
+
+            res.status(200).json({
+                success: true,
+                message: `You are now ${user.isOnDuty ? "On Duty" : "Off Duty"}`,
+                isOnDuty: user.isOnDuty,
+            });
+        });
+
+        export const updatePushToken = catchAsyncErrors(async (req, res, next) => {
+            const { token } = req.body;
+
+            if (!token) {
+                return next(new ErrorHandler("Token is required", 400));
+            }
+
+            // Find user and update their push token
+            await User.findByIdAndUpdate(req.user._id, { pushToken: token });
+
+            res.status(200).json({
+                success: true,
+                message: "Push Token Updated Successfully",
+            });
+        });
+
+        export const getMyChatList = catchAsyncErrors(async (req, res) => {
+            const user = await User.findById(req.user._id).populate("friends", "firstName lastName docAvatar role isOnDuty");
+
+            // For each friend, find the most recent message in the DB
+            const chatList = await Promise.all(user.friends.map(async (friend) => {
+                const conversationId = [req.user._id.toString(), friend._id.toString()].sort().join("_");
+                const lastMsg = await Message.findOne({ conversationId }).sort({ createdAt: -1 });
+
+                return {
+                    friend,
+                    lastMessage: lastMsg ? lastMsg.text : "No messages yet",
+                    lastMessageTime: lastMsg ? lastMsg.createdAt : null
+                };
+            }));
+
+            res.status(200).json({ success: true, chatList });
+        });
 
