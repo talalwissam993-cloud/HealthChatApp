@@ -26,13 +26,13 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // 3. File Upload Configuration (Essential for docAvatar)
-app.use(
-    fileUpload({
-        useTempFiles: true,
-        tempFileDir: "/tmp/",
-        debug: true,
-    })
-);
+app.use(fileUpload({
+    useTempFiles: true,
+    tempFileDir: "/tmp/",
+    // Add this to prevent the "not eligible" warning on JSON routes
+    createParentPath: true,
+    parseNested: true,
+}));
 
 // 4. Database Connection
 dbConnection();
