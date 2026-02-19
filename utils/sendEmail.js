@@ -4,15 +4,13 @@ export const sendEmailVerification = async (options) => {
   // 1. Create reusable transporter
  const transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST,
-    port: 587, // Try 587 if 465 is failing
-    secure: false, // true for 465, false for other ports
-    service: process.env.SMTP_SERVICE,
+    port: 465, // Use 465 directly
+    secure: true, // Use true directly for 465
     auth: {
-        user: process.env.SMTP_MAIL,
-        pass: process.env.SMTP_PASSWORD,
+      user: process.env.SMTP_MAIL,
+      pass: process.env.SMTP_PASSWORD,
     },
-});
-
+  });
   // 2. Define Email Content
   const mailOptions = {
     from: `"HealthChat System" <${process.env.SMTP_MAIL}>`,
