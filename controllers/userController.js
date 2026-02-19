@@ -197,15 +197,16 @@ export const addNewUser = catchAsyncErrors(async (req, res, next) => {
     }
 });
 export const verifyOTP = catchAsyncErrors(async (req, res, next) => {
-    const { email, code } = req.body;
+    // CHANGE: Destructure 'otp' instead of 'code' to match frontend request
+    const { email, otp } = req.body; 
 
-    if (!email || !code) {
-        return next(new ErrorHandler("Email and Code are required!", 400));
+    if (!email || !otp) {
+        return next(new ErrorHandler("Email and OTP are required!", 400));
     }
 
     const user = await User.findOne({
-        email,
-        verificationCode: code,
+        email: email.toLowerCase().trim(),
+        verificationCode: otp, // Matches the 'verificationCode' field in your Schema
         verificationCodeExpire: { $gt: Date.now() },
     }).select("+verificationCode +verificationCodeExpire");
 
@@ -222,9 +223,7 @@ export const verifyOTP = catchAsyncErrors(async (req, res, next) => {
         success: true,
         message: "Account verified successfully! You can now login.",
     });
-});
-
-export const resendOTP = catchAsyncErrors(async (req, res, next) => {
+});export const resendOTP = catchAsyncErrors(async (req, res, next) => {
     const { email } = req.body;
 
     if (!email) {
