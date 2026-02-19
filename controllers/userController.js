@@ -192,7 +192,6 @@ export const addNewUser = catchAsyncErrors(async (req, res, next) => {
     });
 });
 export const verifyOTP = catchAsyncErrors(async (req, res, next) => {
-    // CHANGE: Destructure 'otp' instead of 'code' to match frontend request
     const { email, otp } = req.body;
 
     if (!email || !otp) {
@@ -201,24 +200,25 @@ export const verifyOTP = catchAsyncErrors(async (req, res, next) => {
 
     const user = await User.findOne({
         email: email.toLowerCase().trim(),
-        verificationCode: otp, // Matches the 'verificationCode' field in your Schema
+        verificationCode: otp,
         verificationCodeExpire: { $gt: Date.now() },
-    }).select("+verificationCode +verificationCodeExpire");
+    }).select("+password +verificationCode +verificationCodeExpire");
 
     if (!user) {
         return next(new ErrorHandler("Invalid or expired verification code!", 400));
     }
 
+    // 1. Mark as verified
     user.isVerified = true;
     user.verificationCode = undefined;
     user.verificationCodeExpire = undefined;
     await user.save();
 
-    res.status(200).json({
-        success: true,
-        message: "Account verified successfully! You can now login.",
-    });
+    // 2. Auto-Login: Generate token and send response
+    // This helper sends the cookie and the success JSON
+    generateToken(user, "Account verified! Welcome to Health Chat.", 200, res);
 });
+
 export const resendOTP = catchAsyncErrors(async (req, res, next) => {
     const { email } = req.body;
     if (!email) return next(new ErrorHandler("Email is required!", 400));
@@ -366,38 +366,26 @@ export const searchUsers = catchAsyncErrors(async (req, res) => {
     res.status(200).json({ success: true, users });
 });
 // *****************************************************************
-export const getAllDoctors = async (req, res, next) => {
-    const doctors = await User.find({ role: "Doctor" }); // Fetching the variable
+// Cleaned up Role Fetchers
+export const getAllDoctors = catchAsyncErrors(async (req, res, next) => {
+    const doctors = await User.find({ role: "Doctor" });
+    res.status(200).json({ success: true, doctors });
+});
 
-    res.status(200).json({
-        success: true,
-        doctors, // The frontend will loop through this variable to show cards
-    });
-};
-export const getAllNurse = async (req, res, next) => {
-    const doctors = await User.find({ role: "Nurse" }); // Fetching the variable
+export const getAllNurse = catchAsyncErrors(async (req, res, next) => {
+    const nurses = await User.find({ role: "Nurse" }); // Changed variable name to 'nurses'
+    res.status(200).json({ success: true, nurses });
+});
 
-    res.status(200).json({
-        success: true,
-        doctors, // The frontend will loop through this variable to show cards
-    });
-};
-export const getAllChemist = async (req, res, next) => {
-    const doctors = await User.find({ role: "Chemist" }); // Fetching the variable
+export const getAllChemist = catchAsyncErrors(async (req, res, next) => {
+    const chemists = await User.find({ role: "Chemist" }); // Changed variable name to 'chemists'
+    res.status(200).json({ success: true, chemists });
+});
 
-    res.status(200).json({
-        success: true,
-        doctors, // The frontend will loop through this variable to show cards
-    });
-};
-export const getAllPatient = async (req, res, next) => {
-    const doctors = await User.find({ role: "Patient" }); // Fetching the variable
-
-    res.status(200).json({
-        success: true,
-        doctors, // The frontend will loop through this variable to show cards
-    });
-};
+export const getAllPatient = catchAsyncErrors(async (req, res, next) => {
+    const patients = await User.find({ role: "Patient" }); // Changed variable name to 'patients'
+    res.status(200).json({ success: true, patients });
+});
 // *****************************************************************
 
 // Friends Request
