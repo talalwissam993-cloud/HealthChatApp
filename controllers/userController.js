@@ -3,7 +3,6 @@ import ErrorHandler from "../middlewares/error.js";
 import { User } from "../models/userSchema.js";
 import cloudinary from "cloudinary";
 import { generateToken } from "../utils/jwtToken.js";
-import crypto from "crypto";
 import { sendEmailVerification } from "../utils/sendEmail.js";
 import { FriendRequest } from '../models/FriendRequestChema.js'
 import { Message } from "../models/messageSchema.js";
@@ -130,10 +129,27 @@ export const addNewUser = catchAsyncErrors(async (req, res, next) => {
         return next(new ErrorHandler(`${role} with this Email or NIC already exists!`, 400));
     }
 
-    // 4. Role-Specific Validation
-    if (role === "Doctor" && !doctorDepartment) return next(new ErrorHandler("Doctor Department is required!", 400));
-    if (role === "Nurse" && !nurseDepartment) return next(new ErrorHandler("Nurse Department is required!", 400));
-    if (role === "Chemist" && !chemistType) return next(new ErrorHandler("Chemist Type is required!", 400));
+    // 4. Role-Specific Logic
+    let userData = {
+        firstName, middleName, lastName, email: email.toLowerCase().trim(),
+        phone, nic, dob, gender, password, role
+    };
+
+    if (role === "Doctor") {
+        if (!doctorDepartment) return next(new ErrorHandler("Doctor Department is required!", 400));
+        userData.doctorDepartment = doctorDepartment;
+        userData.qualification = qualification;
+        userData.assignedHospital = assignedHospital;
+    } else if (role === "Nurse") {
+        if (!nurseDepartment) return next(new ErrorHandler("Nurse Department is required!", 400));
+        userData.nurseDepartment = nurseDepartment;
+        userData.shift = shift;
+        userData.assignedHospital = assignedHospital;
+    } else if (role === "Chemist") {
+        if (!chemistType) return next(new ErrorHandler("Chemist Type is required!", 400));
+        userData.chemistType = chemistType;
+        userData.assignedHospital = assignedHospital;
+    }
 
     // 5. Cloudinary Upload
     const cloudinaryResponse = await cloudinary.v2.uploader.upload(
@@ -141,17 +157,14 @@ export const addNewUser = catchAsyncErrors(async (req, res, next) => {
         { folder: "HEALTH_CHAT_AVATARS" }
     );
 
-    // --- NEW: VERIFICATION LOGIC ---
-    // Generate 6-digit random code
+    // 6. Verification Logic
     const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
-    const verificationCodeExpire = Date.now() + 15 * 60 * 1000; // 15 minutes expiry
+    const verificationCodeExpire = Date.now() + 15 * 60 * 1000;
 
-    // 6. Create User (isVerified is now FALSE by default)
+    // 7. Create User
     const user = await User.create({
-        firstName, middleName, lastName, email, phone, nic, dob, gender, password,
-        role, doctorDepartment, nurseDepartment, chemistType, qualification,
-        shift, assignedHospital,
-        isVerified: false, // Changed from true
+        ...userData,
+        isVerified: false,
         verificationCode,
         verificationCodeExpire,
         docAvatar: {
@@ -160,104 +173,88 @@ export const addNewUser = catchAsyncErrors(async (req, res, next) => {
         },
     });
 
-    // 7. Send the Email
-    const message = `Welcome to Health Chat. Your verification code is: ${verificationCode}. It expires in 15 minutes.`;
+    // 8. Debug Log (Visible in Render Terminal)
+    console.log("-----------------------------------------");
+    console.log(`NEW USER: ${user.firstName} | OTP: ${verificationCode}`);
+    console.log("-----------------------------------------");
 
-    try {
-        await sendEmailVerification({
-            email: user.email,
-            subject: "Verify Your Health Chat Account",
-            code: verificationCode,
-            message,
-        });
+    // 9. Send Email (NON-BLOCKING)
+    sendEmailVerification({
+        email: user.email,
+        subject: "Verify Your Health Chat Account",
+        code: verificationCode,
+    }).catch(err => console.error("❌ NODEMAILER BACKGROUND ERROR:", err.message));
 
-        res.status(201).json({
-            success: true,
-            message: `Registration Successful! Verification code sent to ${user.email}`,
-        });
-    } catch (error) {
-        // If email fails, we don't want a "broken" user in DB with no way to verify
-        await User.findByIdAndDelete(user._id);
-        return next(new ErrorHandler("Email could not be sent. Please try again.", 500));
-    }
+    // 10. Immediate Success Response
+    res.status(201).json({
+        success: true,
+        message: `Registration Successful! Please check your email for the code.`,
+    });
 });
-
 export const verifyOTP = catchAsyncErrors(async (req, res, next) => {
-    const { email, code } = req.body;
+    const { email, otp } = req.body;
 
-    if (!email || !code) {
-        return next(new ErrorHandler("Email and Code are required!", 400));
+    if (!email || !otp) {
+        return next(new ErrorHandler("Email and OTP are required!", 400));
     }
 
     const user = await User.findOne({
-        email,
-        verificationCode: code,
+        email: email.toLowerCase().trim(),
+        verificationCode: otp,
         verificationCodeExpire: { $gt: Date.now() },
-    }).select("+verificationCode +verificationCodeExpire");
+    }).select("+password +verificationCode +verificationCodeExpire");
 
     if (!user) {
         return next(new ErrorHandler("Invalid or expired verification code!", 400));
     }
 
+    // 1. Mark as verified
     user.isVerified = true;
     user.verificationCode = undefined;
     user.verificationCodeExpire = undefined;
     await user.save();
 
-    res.status(200).json({
-        success: true,
-        message: "Account verified successfully! You can now login.",
-    });
+    // 2. Auto-Login: Generate token and send response
+    // This helper sends the cookie and the success JSON
+    generateToken(user, "Account verified! Welcome to Health Chat.", 200, res);
 });
 
 export const resendOTP = catchAsyncErrors(async (req, res, next) => {
     const { email } = req.body;
+    if (!email) return next(new ErrorHandler("Email is required!", 400));
 
-    if (!email) {
-        return next(new ErrorHandler("Email is required!", 400));
-    }
+    const user = await User.findOne({ email: email.toLowerCase().trim() });
+    if (!user) return next(new ErrorHandler("User not found!", 404));
+    if (user.isVerified) return next(new ErrorHandler("Already verified!", 400));
 
-    const user = await User.findOne({ email });
-
-    if (!user) {
-        return next(new ErrorHandler("User not found!", 404));
-    }
-
-    if (user.isVerified) {
-        return next(new ErrorHandler("Account is already verified!", 400));
-    }
-    if (user.otpResendCount >= 3 && user.lastOtpResend > Date.now() - 60 * 60 * 1000) {
+    // Fix: Ensure variables exist before comparison
+    const now = Date.now();
+    if (user.otpResendCount >= 3 && user.lastOtpResend > (now - 60 * 60 * 1000)) {
         return next(new ErrorHandler("Too many attempts. Try again in an hour.", 429));
     }
-    user.otpResendCount = (user.otpResendCount || 0) + 1;
-    user.lastOtpResend = Date.now();
 
-    // Generate new 6-digit code
     const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
-    const verificationCodeExpire = Date.now() + 15 * 60 * 1000; // 15 mins
 
-    // Update user with new code
     user.verificationCode = verificationCode;
-    user.verificationCodeExpire = verificationCodeExpire;
+    user.verificationCodeExpire = now + 15 * 60 * 1000;
+    user.otpResendCount = (user.otpResendCount || 0) + 1;
+    user.lastOtpResend = now;
+
     await user.save();
 
-    // Send Email
     try {
         await sendEmailVerification({
             email: user.email,
             subject: "HealthChat | New Verification Code",
             code: verificationCode,
+            message: `Your new code is ${verificationCode}` // Ensure your helper handles 'message'
         });
 
-        res.status(200).json({
-            success: true,
-            message: "A new verification code has been sent to your email!",
-        });
+        res.status(200).json({ success: true, message: "New code sent!" });
     } catch (error) {
-        return next(new ErrorHandler("Failed to send email. Try again.", 500));
+        return next(new ErrorHandler("Mail server error. Try again later.", 500));
     }
 });
-
 export const updateProfile = catchAsyncErrors(async (req, res, next) => {
     // 1. Fetch user (select password in case they want to change it)
     const user = await User.findById(req.user._id).select("+password");
@@ -369,38 +366,26 @@ export const searchUsers = catchAsyncErrors(async (req, res) => {
     res.status(200).json({ success: true, users });
 });
 // *****************************************************************
-export const getAllDoctors = async (req, res, next) => {
-    const doctors = await User.find({ role: "Doctor" }); // Fetching the variable
+// Cleaned up Role Fetchers
+export const getAllDoctors = catchAsyncErrors(async (req, res, next) => {
+    const doctors = await User.find({ role: "Doctor" });
+    res.status(200).json({ success: true, doctors });
+});
 
-    res.status(200).json({
-        success: true,
-        doctors, // The frontend will loop through this variable to show cards
-    });
-};
-export const getAllNurse = async (req, res, next) => {
-    const doctors = await User.find({ role: "Nurse" }); // Fetching the variable
+export const getAllNurse = catchAsyncErrors(async (req, res, next) => {
+    const nurses = await User.find({ role: "Nurse" }); // Changed variable name to 'nurses'
+    res.status(200).json({ success: true, nurses });
+});
 
-    res.status(200).json({
-        success: true,
-        doctors, // The frontend will loop through this variable to show cards
-    });
-};
-export const getAllChemist = async (req, res, next) => {
-    const doctors = await User.find({ role: "Chemist" }); // Fetching the variable
+export const getAllChemist = catchAsyncErrors(async (req, res, next) => {
+    const chemists = await User.find({ role: "Chemist" }); // Changed variable name to 'chemists'
+    res.status(200).json({ success: true, chemists });
+});
 
-    res.status(200).json({
-        success: true,
-        doctors, // The frontend will loop through this variable to show cards
-    });
-};
-export const getAllPatient = async (req, res, next) => {
-    const doctors = await User.find({ role: "Patient" }); // Fetching the variable
-
-    res.status(200).json({
-        success: true,
-        doctors, // The frontend will loop through this variable to show cards
-    });
-};
+export const getAllPatient = catchAsyncErrors(async (req, res, next) => {
+    const patients = await User.find({ role: "Patient" }); // Changed variable name to 'patients'
+    res.status(200).json({ success: true, patients });
+});
 // *****************************************************************
 
 // Friends Request

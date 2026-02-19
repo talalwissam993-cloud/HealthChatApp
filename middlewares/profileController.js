@@ -1,5 +1,3 @@
-import { Doctor } from "../models/doctorSchema.js";
-import { Nurse } from "../models/nurseSchema.js";
 import { catchAsyncErrors } from "../middlewares/catchAsyncErrors.js";
 import ErrorHandler from "../middlewares/error.js";
 import cloudinary from "cloudinary";

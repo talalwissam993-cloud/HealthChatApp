@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 import validator from "validator";
-import bcrypt from "bcrypt";
+import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { Counter } from './CounterModel.js'
 
@@ -60,11 +60,13 @@ const userSchema = new mongoose.Schema({
     // Specialized Departments
     doctorDepartment: {
         type: String,
-        enum: ["Pediatrics", "Orthopedics", "Cardiology", "Neurology", "Oncology", "Radiology", "General"]
+        enum: ["General Medicine", "Cardiology", "Dermatology",
+            "Neurology", "Pediatrics", "Psychiatry",
+            "Orthopedics", "Radiology", "Ophthalmology",
+            "Emergency Medicine", "Surgery"]
     },
     nurseDepartment: {
         type: String,
-        required: true,
         enum: [
             "Critical Care / ICU",
             "Emergency & Trauma",
