@@ -1,28 +1,31 @@
 import nodemailer from "nodemailer";
+import { Resend } from 'resend';
 
 export const sendEmailVerification = async (options) => {
-  const transporter = nodemailer.createTransport({
-    service: "gmail", 
-    host: "smtp.gmail.com",
-    port: 465,
-    secure: true, 
-    auth: {
-      user: process.env.SMTP_MAIL,
-      pass: process.env.SMTP_PASSWORD, // Must be 16-digit App Password
-    },
-    // Add a longer timeout to help Render's slow network
-    connectionTimeout: 20000, 
-    greetingTimeout: 10000,
-    socketTimeout: 20000,
-  });
+  try {
+    const data = await resend.emails.send({
+      from: 'HealthChat <onboarding@resend.dev>', // Default for testing
+      to: options.email,
+      subject: options.subject,
+      html: `
+                <div style="font-family: sans-serif; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
+                    <h2 style="color: #2D5AFE;">Health Chat Verification</h2>
+                    <p>Hello,</p>
+                    <p>Your 6-digit verification code is:</p>
+                    <h1 style="background: #f4f4f4; padding: 10px; text-align: center; letter-spacing: 5px;">
+                        ${options.code}
+                    </h1>
+                    <p>This code will expire in 15 minutes.</p>
+                    <hr />
+                    <small>If you didn't request this, please ignore this email.</small>
+                </div>
+            `,
+    });
 
-  const mailOptions = {
-    from: `"HealthChat" <${process.env.SMTP_MAIL}>`,
-    to: options.email,
-    subject: options.subject,
-    text: `Your HealthChat code is: ${options.code}`,
-    html: `<p>Your HealthChat code is: <b>${options.code}</b></p>`,
-  };
-
-  return await transporter.sendMail(mailOptions);
+    console.log("Email Sent Successfully:", data);
+    return data;
+  } catch (error) {
+    console.error("Resend API Error:", error);
+    throw new Error("Failed to send verification email.");
+  }
 };
