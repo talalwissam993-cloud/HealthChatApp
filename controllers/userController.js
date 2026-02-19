@@ -129,14 +129,12 @@ export const addNewUser = catchAsyncErrors(async (req, res, next) => {
         return next(new ErrorHandler(`${role} with this Email or NIC already exists!`, 400));
     }
 
-    // 4. PREPARE CLEAN DATA OBJECT
-    // Start with core fields
+    // 4. Role-Specific Logic
     let userData = {
-        firstName, middleName, lastName, email, phone, nic, dob, gender, password, role
+        firstName, middleName, lastName, email: email.toLowerCase().trim(), 
+        phone, nic, dob, gender, password, role
     };
 
-    // 5. ROLE-SPECIFIC CLEANING (The Fix)
-    // Only add professional fields if they are actually required for the role
     if (role === "Doctor") {
         if (!doctorDepartment) return next(new ErrorHandler("Doctor Department is required!", 400));
         userData.doctorDepartment = doctorDepartment;
@@ -151,22 +149,21 @@ export const addNewUser = catchAsyncErrors(async (req, res, next) => {
         if (!chemistType) return next(new ErrorHandler("Chemist Type is required!", 400));
         userData.chemistType = chemistType;
         userData.assignedHospital = assignedHospital;
-    } 
-    // If role is Patient, doctorDepartment/nurseDepartment/etc are NOT added to userData at all.
+    }
 
-    // 6. Cloudinary Upload
+    // 5. Cloudinary Upload
     const cloudinaryResponse = await cloudinary.v2.uploader.upload(
         docAvatar.tempFilePath,
         { folder: "HEALTH_CHAT_AVATARS" }
     );
 
-    // 7. Verification Logic
+    // 6. Verification Logic
     const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
     const verificationCodeExpire = Date.now() + 15 * 60 * 1000;
 
-    // 8. Create User using the CLEAN 'userData' object
+    // 7. Create User (DO NOT DELETE THIS IF EMAIL FAILS)
     const user = await User.create({
-        ...userData, // Spread only the cleaned fields
+        ...userData,
         isVerified: false,
         verificationCode,
         verificationCodeExpire,
@@ -176,15 +173,12 @@ export const addNewUser = catchAsyncErrors(async (req, res, next) => {
         },
     });
 
-    // 9. Send the Email
-    const message = `Welcome to Health Chat. Your verification code is: ${verificationCode}.`;
-
+    // 8. Send the Email
     try {
         await sendEmailVerification({
             email: user.email,
             subject: "Verify Your Health Chat Account",
             code: verificationCode,
-            message,
         });
 
         res.status(201).json({
@@ -192,11 +186,15 @@ export const addNewUser = catchAsyncErrors(async (req, res, next) => {
             message: `Registration Successful! Verification code sent to ${user.email}`,
         });
     } catch (error) {
-        await User.findByIdAndDelete(user._id);
-        return next(new ErrorHandler("Email could not be sent. Please try again.", 500));
+        // --- THE FIX ---
+        // We do NOT delete the user. We send a 201 (Created) but with a warning.
+        // This allows the user to use the "Resend" button in your app.
+        res.status(201).json({
+            success: true,
+            message: "Account created but Email could not be sent. Please click Resend OTP.",
+        });
     }
-});
-export const verifyOTP = catchAsyncErrors(async (req, res, next) => {
+});export const verifyOTP = catchAsyncErrors(async (req, res, next) => {
     // CHANGE: Destructure 'otp' instead of 'code' to match frontend request
     const { email, otp } = req.body; 
 
