@@ -223,54 +223,43 @@ export const verifyOTP = catchAsyncErrors(async (req, res, next) => {
         success: true,
         message: "Account verified successfully! You can now login.",
     });
-});export const resendOTP = catchAsyncErrors(async (req, res, next) => {
+});
+export const resendOTP = catchAsyncErrors(async (req, res, next) => {
     const { email } = req.body;
+    if (!email) return next(new ErrorHandler("Email is required!", 400));
 
-    if (!email) {
-        return next(new ErrorHandler("Email is required!", 400));
-    }
+    const user = await User.findOne({ email: email.toLowerCase().trim() });
+    if (!user) return next(new ErrorHandler("User not found!", 404));
+    if (user.isVerified) return next(new ErrorHandler("Already verified!", 400));
 
-    const user = await User.findOne({ email });
-
-    if (!user) {
-        return next(new ErrorHandler("User not found!", 404));
-    }
-
-    if (user.isVerified) {
-        return next(new ErrorHandler("Account is already verified!", 400));
-    }
-    if (user.otpResendCount >= 3 && user.lastOtpResend > Date.now() - 60 * 60 * 1000) {
+    // Fix: Ensure variables exist before comparison
+    const now = Date.now();
+    if (user.otpResendCount >= 3 && user.lastOtpResend > (now - 60 * 60 * 1000)) {
         return next(new ErrorHandler("Too many attempts. Try again in an hour.", 429));
     }
-    user.otpResendCount = (user.otpResendCount || 0) + 1;
-    user.lastOtpResend = Date.now();
 
-    // Generate new 6-digit code
     const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
-    const verificationCodeExpire = Date.now() + 15 * 60 * 1000; // 15 mins
-
-    // Update user with new code
+    
     user.verificationCode = verificationCode;
-    user.verificationCodeExpire = verificationCodeExpire;
+    user.verificationCodeExpire = now + 15 * 60 * 1000;
+    user.otpResendCount = (user.otpResendCount || 0) + 1;
+    user.lastOtpResend = now;
+    
     await user.save();
 
-    // Send Email
     try {
         await sendEmailVerification({
             email: user.email,
             subject: "HealthChat | New Verification Code",
             code: verificationCode,
+            message: `Your new code is ${verificationCode}` // Ensure your helper handles 'message'
         });
 
-        res.status(200).json({
-            success: true,
-            message: "A new verification code has been sent to your email!",
-        });
+        res.status(200).json({ success: true, message: "New code sent!" });
     } catch (error) {
-        return next(new ErrorHandler("Failed to send email. Try again.", 500));
+        return next(new ErrorHandler("Mail server error. Try again later.", 500));
     }
 });
-
 export const updateProfile = catchAsyncErrors(async (req, res, next) => {
     // 1. Fetch user (select password in case they want to change it)
     const user = await User.findById(req.user._id).select("+password");
