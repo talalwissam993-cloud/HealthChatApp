@@ -175,26 +175,20 @@ export const addNewUser = catchAsyncErrors(async (req, res, next) => {
 
     // 8. Send the Email
     try {
-        await sendEmailVerification({
-            email: user.email,
-            subject: "Verify Your Health Chat Account",
-            code: verificationCode,
-        });
+        sendEmailVerification({
+    email: user.email,
+    subject: "Verify Your Health Chat Account",
+    code: verificationCode,
+}).catch(err => console.error("Delayed Email Error:", err.message));
 
-        res.status(201).json({
-            success: true,
-            message: `Registration Successful! Verification code sent to ${user.email}`,
-        });
-    } catch (error) {
-        // --- THE FIX ---
-        // We do NOT delete the user. We send a 201 (Created) but with a warning.
-        // This allows the user to use the "Resend" button in your app.
-        res.status(201).json({
-            success: true,
-            message: "Account created but Email could not be sent. Please click Resend OTP.",
-        });
-    }
-});export const verifyOTP = catchAsyncErrors(async (req, res, next) => {
+// Immediately send success to the mobile app
+res.status(201).json({
+    success: true,
+    message: `Registration Successful! Check your email.`,
+});
+        
+});
+export const verifyOTP = catchAsyncErrors(async (req, res, next) => {
     // CHANGE: Destructure 'otp' instead of 'code' to match frontend request
     const { email, otp } = req.body; 
 
