@@ -3,6 +3,7 @@ import cloudinary from "cloudinary";
 import { Server } from "socket.io";
 import http from "http";
 import { Message } from "./models/messageSchema.js"; // Import the model we discussed
+import axios from "axios"; // Add this line at the top!
 
 cloudinary.v2.config({
     cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -45,18 +46,21 @@ io.on("connection", (socket) => {
             const { sender, receiver, text } = data;
             const conversationId = [sender, receiver].sort().join("_");
 
-            // SAVE TO DATABASE
             const newMessage = await Message.create({
                 conversationId,
                 sender,
                 receiver,
                 text,
+                status: "sent" // Ensure default status
             });
 
-            // EMIT TO THE ROOM
-            io.to(conversationId).emit("receive_message", newMessage);
+            // 1. Send to the receiver
+            socket.to(conversationId).emit("receive_message", newMessage);
+
+            // 2. Send back to the sender as a 'confirmation'
+            socket.emit("message_delivered", { tempId: data.tempId, permanentId: newMessage._id });
         } catch (error) {
-            console.error("Message error:", error);
+            socket.emit("message_error", { message: "Failed to deliver" });
         }
     });
 
@@ -64,6 +68,20 @@ io.on("connection", (socket) => {
         console.log("User disconnected");
     });
 });
+
+const keepAlive = (url) => {
+    setInterval(async () => {
+        try {
+            console.log("Pinged Health Chat to stay awake...");
+            await axios.get(url);
+        } catch (error) {
+            console.error("Keep-alive ping failed:", error.message);
+        }
+    }, 14 * 60 * 1000); // 14 minutes
+};
+
+// Start the pinging logic
+keepAlive("https://healthchatapp.onrender.com/api/v1/user/getuserdetails");
 
 const PORT = process.env.PORT || 8001;
 

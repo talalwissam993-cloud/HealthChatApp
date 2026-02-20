@@ -42,6 +42,7 @@ dbConnection();
 
 // 5. Routes Integration
 app.use("/api/v1/user", userRouter);
+app.get("/health", (req, res) => res.status(200).send("OK"));
 
 
 

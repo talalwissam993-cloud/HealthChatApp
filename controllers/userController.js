@@ -235,9 +235,11 @@ export const resendOTP = catchAsyncErrors(async (req, res, next) => {
 
     const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
 
-    user.verificationCode = verificationCode;
-    user.verificationCodeExpire = now + 15 * 60 * 1000;
-    user.otpResendCount = (user.otpResendCount || 0) + 1;
+    // Inside resendOTP and forgotPassword
+    user.verificationCode = verificationCode; // Change from user.otp
+    user.verificationCodeExpire = Date.now() + 15 * 60 * 1000;
+
+    user.otpResendCount = (Number(user.otpResendCount) || 0) + 1;
     user.lastOtpResend = now;
 
     await user.save();
@@ -245,14 +247,17 @@ export const resendOTP = catchAsyncErrors(async (req, res, next) => {
     try {
         await sendEmailVerification({
             email: user.email,
-            subject: "HealthChat | New Verification Code",
+            subject: "Verify Your Health Chat Account",
             code: verificationCode,
-            message: `Your new code is ${verificationCode}` // Ensure your helper handles 'message'
         });
 
         res.status(200).json({ success: true, message: "New code sent!" });
     } catch (error) {
-        return next(new ErrorHandler("Mail server error. Try again later.", 500));
+        // LOG THE ACTUAL ERROR TO YOUR RENDER/TERMINAL CONSOLE
+        console.error("Resend API Error:", error.message);
+
+        // Return the actual error message to the frontend for debugging
+        return next(new ErrorHandler(`Email Failed: ${error.message}`, 500));
     }
 });
 export const updateProfile = catchAsyncErrors(async (req, res, next) => {
@@ -507,3 +512,40 @@ export const getMyChatList = catchAsyncErrors(async (req, res) => {
     res.status(200).json({ success: true, chatList });
 });
 
+
+export const forgotPassword = catchAsyncErrors(async (req, res, next) => {
+    const { email } = req.body;
+
+    if (!email) {
+        return next(new ErrorHandler("Please provide your email!", 400));
+    }
+
+    const user = await User.findOne({ email: email.toLowerCase().trim() });
+    if (!user) {
+        return next(new ErrorHandler("User not found with this email!", 404));
+    }
+
+    // Generate a 6-digit Reset OTP
+    const resetOtp = Math.floor(100000 + Math.random() * 900000).toString();
+    user.otp = resetOtp;
+    user.otpExpire = Date.now() + 15 * 60 * 1000; // 15 mins
+    await user.save();
+
+    try {
+        await sendEmailVerification({
+            email: user.email,
+            subject: "HealthChat Password Reset Code",
+            code: resetOtp,
+        });
+
+        res.status(200).json({
+            success: true,
+            message: `Reset code sent to ${user.email}`,
+        });
+    } catch (error) {
+        user.otp = undefined;
+        user.otpExpire = undefined;
+        await user.save();
+        return next(new ErrorHandler("Email could not be sent", 500));
+    }
+});
