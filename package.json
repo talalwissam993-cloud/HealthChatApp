@@ -25,11 +25,7 @@
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^8.21.0",
     "nodemailer": "^8.0.1",
-<<<<<<< HEAD
     "resend": "^6.9.2",
-=======
-     "resend": "^6.9.2",
->>>>>>> 2c1902b4485d263743706e9b84ea94beaf23c4c4
     "socket.io": "^4.8.3",
     "twilio": "^5.12.1",
     "validator": "^13.15.26"
