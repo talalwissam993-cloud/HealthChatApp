@@ -4,7 +4,6 @@ import { Resend } from 'resend';
 const resend = new Resend('re_ZYqodTCE_MbtyneFu4pHPhJPKFbZwUyZY');
 
 export const sendEmailVerification = async (options) => {
-<<<<<<< HEAD
   try {
     console.log(`Attempting to send OTP to: ${options.email}...`);
 
@@ -12,36 +11,7 @@ export const sendEmailVerification = async (options) => {
       from: 'HealthChat <onboarding@resend.dev>',
       to: [options.email.toLowerCase().trim()], // Clean the email string
       subject: options.subject || "Your HealthChat Verification Code",
-      html: `...your template...`,
-    });
-
-    if (error) {
-      // This is usually where the "Mail server error" starts.
-      // 403 error means you're sending to an unverified email address.
-      console.error("RESEND API REJECTION:", {
-        message: error.message,
-        name: error.name,
-        // In some versions, error details are in error.error
-      });
-      throw new Error(error.message);
-    }
-
-    console.log("✅ Resend Response Data:", data);
-    return data;
-
-  } catch (err) {
-    // If it hits this, it's either a network issue or our custom throw above
-    console.error("CRITICAL SMTP/API FAILURE:", err.stack);
-    throw err;
-  }
-};
-=======
-    try {
-        const { data, error } = await resend.emails.send({
-            from: 'HealthChat <onboarding@resend.dev>',
-            to: options.email,
-            subject: options.subject, // "Your HealthChat Verification Code"
-            html: `
+      html: `
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e1e1e1; border-radius: 10px;">
                     <h2 style="color: #2D5AFE; text-align: center;">Health Chat Verification</h2>
                     <p style="font-size: 16px; color: #333;">Welcome to Health Chat. Please use the code below to verify your identity and activate your account:</p>
@@ -55,18 +25,21 @@ export const sendEmailVerification = async (options) => {
                     <p style="font-size: 12px; color: #94A3B8; text-align: center;">© 2026 Health Chat Jordan. All rights reserved.</p>
                 </div>
             `,
-        });
+    });
 
-        if (error) {
-            console.error("Resend API Internal Error:", error);
-            throw new Error(error.message);
-        }
-
-        console.log("OTP Email successfully sent to:", options.email);
-        return data;
-    } catch (err) {
-        console.error("Critical Email Error:", err);
-        throw new Error("Could not send verification email.");
+    if (error) {
+      console.error("RESEND API REJECTION:", {
+        message: error.message,
+        name: error.name,
+      });
+      throw new Error(error.message);
     }
+
+    console.log("✅ OTP Email successfully sent to:", options.email);
+    return data;
+
+  } catch (err) {
+    console.error("CRITICAL SMTP/API FAILURE:", err.stack);
+    throw new Error("Could not send verification email.");
+  }
 };
->>>>>>> 2c1902b4485d263743706e9b84ea94beaf23c4c4
