@@ -177,8 +177,6 @@ export const addNewUser = catchAsyncErrors(async (req, res, next) => {
     console.log("-----------------------------------------");
     console.log(`NEW USER: ${user.firstName} | OTP: ${verificationCode}`);
     console.log("-----------------------------------------");
-<<<<<<< HEAD
-
     // 9. Send Email (NON-BLOCKING)
     sendEmailVerification({
         email: user.email,
