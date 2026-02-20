@@ -13,7 +13,7 @@ config({ path: "./config/config.env" });
 // 1. MOBILE-FRIENDLY CORS
 app.use(
     cors({
-        origin: true, // Allows all origins during development to prevent "Stuck" screens
+        origin: true, 
         methods: ["GET", "POST", "DELETE", "PUT"],
         credentials: true,
     })
@@ -33,15 +33,14 @@ app.use(fileUpload({
 // 3. DATABASE
 dbConnection();
 
-// 4. PUBLIC HEALTH CHECK (Use this for the Ping)
-app.get("/health", (req, res) => res.status(200).json({ success: true, message: "Server is awake" }));
-router.get("/ping", (req, res) => {
+// 4. PUBLIC HEALTH CHECK (Consolidated for UptimeRobot)
+// Use this URL in UptimeRobot: https://healthchatapp.onrender.com/ping
+app.get("/ping", (req, res) => {
     res.status(200).send("pong");
 });
 
 // 5. ROUTES
 app.use("/api/v1/user", userRouter);
-app.get("/health", (req, res) => res.status(200).send("OK"));
 
 // 6. ERROR MIDDLEWARE
 app.use(errorMiddleware);
