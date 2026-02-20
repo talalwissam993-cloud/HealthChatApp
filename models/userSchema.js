@@ -29,6 +29,8 @@ const userSchema = new mongoose.Schema({
     isVerified: { type: Boolean, default: false },
     verificationCode: { type: String, select: false },
     verificationCodeExpire: { type: Date, select: false },
+    otpResendCount: { type: Number, default: 0 }, // Add this!
+    lastOtpResend: { type: Date },               // Add this!
 
     doctorLicenseNumber: {
         type: String,
