@@ -157,65 +157,47 @@ export const addNewUser = catchAsyncErrors(async (req, res, next) => {
         { folder: "HEALTH_CHAT_AVATARS" }
     );
 
-    // 6. Verification Logic
-    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
-    const verificationCodeExpire = Date.now() + 15 * 60 * 1000;
+    // 6. Verification Logic (SKIPPED)
 
-    // 7. Create User
+    // 7. Create User (Removed verificationCode references)
     const user = await User.create({
         ...userData,
-        isVerified: false,
-        verificationCode,
-        verificationCodeExpire,
+        isVerified: true, // User is verified immediately
         docAvatar: {
             public_id: cloudinaryResponse.public_id,
             url: cloudinaryResponse.secure_url,
         },
     });
 
-    // 8. Debug Log (Visible in Render Terminal)
+    // 8. Debug Log
     console.log("-----------------------------------------");
-    console.log(`NEW USER: ${user.firstName} | OTP: ${verificationCode}`);
+    console.log(`NEW USER REGISTERED: ${user.firstName} (${user.role})`);
     console.log("-----------------------------------------");
-    // 9. Send Email (NON-BLOCKING)
-    sendEmailVerification({
-        email: user.email,
-        subject: "Verify Your Health Chat Account",
-        code: verificationCode,
-    }).catch(err => console.error("❌ NODEMAILER BACKGROUND ERROR:", err.message));
+
+    // 9. Send Email (SKIPPED - No OTP needed)
 
     // 10. Immediate Success Response
     res.status(201).json({
         success: true,
-        message: `Registration Successful! Please check your email for the code.`,
+        message: `Registration Successful! You can now log in.`,
     });
 });
 export const verifyOTP = catchAsyncErrors(async (req, res, next) => {
     const { email, otp } = req.body;
-
-    if (!email || !otp) {
-        return next(new ErrorHandler("Email and OTP are required!", 400));
-    }
-
     const user = await User.findOne({
         email: email.toLowerCase().trim(),
         verificationCode: otp,
         verificationCodeExpire: { $gt: Date.now() },
-    }).select("+password +verificationCode +verificationCodeExpire");
+    }).select("+verificationCode +verificationCodeExpire"); // CRITICAL: Pulls hidden field
 
-    if (!user) {
-        return next(new ErrorHandler("Invalid or expired verification code!", 400));
-    }
+    if (!user) return next(new ErrorHandler("Invalid or expired code!", 400));
 
-    // 1. Mark as verified
     user.isVerified = true;
     user.verificationCode = undefined;
     user.verificationCodeExpire = undefined;
     await user.save();
 
-    // 2. Auto-Login: Generate token and send response
-    // This helper sends the cookie and the success JSON
-    generateToken(user, "Account verified! Welcome to Health Chat.", 200, res);
+    generateToken(user, "Verified!", 200, res);
 });
 
 export const resendOTP = catchAsyncErrors(async (req, res, next) => {
@@ -521,10 +503,11 @@ export const forgotPassword = catchAsyncErrors(async (req, res, next) => {
         return next(new ErrorHandler("User not found with this email!", 404));
     }
 
-    // Generate a 6-digit Reset OTP
+    // FIX: Use verificationCode instead of otp to match your Schema and verification logic
     const resetOtp = Math.floor(100000 + Math.random() * 900000).toString();
-    user.otp = resetOtp;
-    user.otpExpire = Date.now() + 15 * 60 * 1000; // 15 mins
+    user.verificationCode = resetOtp;
+    user.verificationCodeExpire = Date.now() + 15 * 60 * 1000; // 15 mins
+
     await user.save();
 
     try {
@@ -539,9 +522,10 @@ export const forgotPassword = catchAsyncErrors(async (req, res, next) => {
             message: `Reset code sent to ${user.email}`,
         });
     } catch (error) {
-        user.otp = undefined;
-        user.otpExpire = undefined;
+        user.verificationCode = undefined;
+        user.verificationCodeExpire = undefined;
         await user.save();
+        console.error("Forgot Password Email Error:", error.message);
         return next(new ErrorHandler("Email could not be sent", 500));
     }
 });
