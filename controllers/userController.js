@@ -228,91 +228,6 @@ export const resendOTP = catchAsyncErrors(async (req, res, next) => {
     if (!user) return next(new ErrorHandler("User not found!", 404));
     if (user.isVerified) return next(new ErrorHandler("Already verified!", 400));
 
-    // Fix: Ensure variables exist before comparison
-    const now = Date.now();
-    if (user.otpResendCount >= 3 && user.lastOtpResend > (now - 60 * 60 * 1000)) {
-        return next(new ErrorHandler("Too many attempts. Try again in an hour.", 429));
-    }
-
-    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
-
-    // Inside resendOTP and forgotPassword
-    user.verificationCode = verificationCode; // Change from user.otp
-    user.verificationCodeExpire = Date.now() + 15 * 60 * 1000;
-
-    user.otpResendCount = (Number(user.otpResendCount) || 0) + 1;
-    user.lastOtpResend = now;
-
-    await user.save();
-
-    try {
-        await sendEmailVerification({
-            email: user.email,
-            subject: "Verify Your Health Chat Account",
-            code: verificationCode,
-        });
-
-        res.status(200).json({ success: true, message: "New code sent!" });
-    } catch (error) {
-        // LOG THE ACTUAL ERROR TO YOUR RENDER/TERMINAL CONSOLE
-        console.error("Resend API Error:", error.message);
-
-        // Return the actual error message to the frontend for debugging
-        return next(new ErrorHandler(`Email Failed: ${error.message}`, 500));
-    }
-});
-=======
-
-    // 9. Send Email (NON-BLOCKING)
-    sendEmailVerification({
-        email: user.email,
-        subject: "Verify Your Health Chat Account",
-        code: verificationCode,
-    }).catch(err => console.error("❌ NODEMAILER BACKGROUND ERROR:", err.message));
-
-    // 10. Immediate Success Response
-    res.status(201).json({
-        success: true,
-        message: `Registration Successful! Please check your email for the code.`,
-    });
-});
-export const verifyOTP = catchAsyncErrors(async (req, res, next) => {
-    const { email, otp } = req.body;
-
-    if (!email || !otp) {
-        return next(new ErrorHandler("Email and OTP are required!", 400));
-    }
-
-    const user = await User.findOne({
-        email: email.toLowerCase().trim(),
-        verificationCode: otp,
-        verificationCodeExpire: { $gt: Date.now() },
-    }).select("+password +verificationCode +verificationCodeExpire");
-
-    if (!user) {
-        return next(new ErrorHandler("Invalid or expired verification code!", 400));
-    }
-
-    // 1. Mark as verified
-    user.isVerified = true;
-    user.verificationCode = undefined;
-    user.verificationCodeExpire = undefined;
-    await user.save();
-
-    // 2. Auto-Login: Generate token and send response
-    // This helper sends the cookie and the success JSON
-    generateToken(user, "Account verified! Welcome to Health Chat.", 200, res);
-});
-
-export const resendOTP = catchAsyncErrors(async (req, res, next) => {
-    const { email } = req.body;
-    if (!email) return next(new ErrorHandler("Email is required!", 400));
-
-    const user = await User.findOne({ email: email.toLowerCase().trim() });
-    if (!user) return next(new ErrorHandler("User not found!", 404));
-    if (user.isVerified) return next(new ErrorHandler("Already verified!", 400));
-
-    // Fix: Ensure variables exist before comparison
     const now = Date.now();
     if (user.otpResendCount >= 3 && user.lastOtpResend > (now - 60 * 60 * 1000)) {
         return next(new ErrorHandler("Too many attempts. Try again in an hour.", 429));
@@ -322,7 +237,7 @@ export const resendOTP = catchAsyncErrors(async (req, res, next) => {
 
     user.verificationCode = verificationCode;
     user.verificationCodeExpire = now + 15 * 60 * 1000;
-    user.otpResendCount = (user.otpResendCount || 0) + 1;
+    user.otpResendCount = (Number(user.otpResendCount) || 0) + 1;
     user.lastOtpResend = now;
 
     await user.save();
@@ -332,15 +247,17 @@ export const resendOTP = catchAsyncErrors(async (req, res, next) => {
             email: user.email,
             subject: "HealthChat | New Verification Code",
             code: verificationCode,
-            message: `Your new code is ${verificationCode}` // Ensure your helper handles 'message'
         });
 
         res.status(200).json({ success: true, message: "New code sent!" });
     } catch (error) {
+        // Log detailed error for you to see in Render logs
+        console.error("Resend API Error:", error.message);
+        // Return a clean error to the user
         return next(new ErrorHandler("Mail server error. Try again later.", 500));
     }
 });
->>>>>>> 2c1902b4485d263743706e9b84ea94beaf23c4c4
+
 export const updateProfile = catchAsyncErrors(async (req, res, next) => {
     // 1. Fetch user (select password in case they want to change it)
     const user = await User.findById(req.user._id).select("+password");
