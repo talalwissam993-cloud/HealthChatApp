@@ -35,6 +35,9 @@ dbConnection();
 
 // 4. PUBLIC HEALTH CHECK (Use this for the Ping)
 app.get("/health", (req, res) => res.status(200).json({ success: true, message: "Server is awake" }));
+router.get("/ping", (req, res) => {
+    res.status(200).send("pong");
+});
 
 // 5. ROUTES
 app.use("/api/v1/user", userRouter);
