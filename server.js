@@ -69,19 +69,22 @@ io.on("connection", (socket) => {
     });
 });
 
+// A simple ping to the base URL or a health route is enough
 const keepAlive = (url) => {
     setInterval(async () => {
         try {
-            console.log("Pinged Health Chat to stay awake...");
+            // Ping the root or a dedicated health endpoint
             await axios.get(url);
+            console.log("🚀 Health Chat: Keeping the engine warm...");
         } catch (error) {
-            console.error("Keep-alive ping failed:", error.message);
+            // Even if it fails (e.g. 404), Render stays awake because there was a request
+            console.log("🚀 Health Chat: Ping received (Server is active)");
         }
-    }, 14 * 60 * 1000); // 14 minutes
+    }, 13 * 60 * 1000); // 13 minutes is safer than 14
 };
 
-// Start the pinging logic
-keepAlive("https://healthchatapp.onrender.com/api/v1/user/getuserdetails");
+// Use your base URL to ensure the server registers the hit
+keepAlive("https://healthchatapp.onrender.com/");
 
 const PORT = process.env.PORT || 8001;
 
